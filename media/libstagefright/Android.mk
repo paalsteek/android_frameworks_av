@@ -83,17 +83,13 @@ LOCAL_SRC_FILES += \
         PCMExtractor.cpp
 endif
 
-ifneq ($(filter caf bfam,$(TARGET_QCOM_AUDIO_VARIANT)),)
+ifeq ($(TARGET_QCOM_AUDIO_VARIANT),caf)
     ifeq ($(BOARD_USES_ALSA_AUDIO),true)
         LOCAL_SRC_FILES += LPAPlayerALSA.cpp
         ifeq ($(call is-chipset-in-board-platform,msm8960),true)
             LOCAL_SRC_FILES += TunnelPlayer.cpp
             LOCAL_CFLAGS += -DUSE_TUNNEL_MODE
             LOCAL_CFLAGS += -DTUNNEL_MODE_SUPPORTS_AMRWB
-        endif
-        ifeq ($(call is-chipset-in-board-platform,msm8974),true)
-            LOCAL_SRC_FILES += TunnelPlayer.cpp
-            LOCAL_CFLAGS += -DUSE_TUNNEL_MODE
         endif
         ifeq ($(NO_TUNNEL_MODE_FOR_MULTICHANNEL),true)
             LOCAL_CFLAGS += -DNO_TUNNEL_MODE_FOR_MULTICHANNEL
@@ -105,12 +101,17 @@ ifneq ($(filter caf bfam,$(TARGET_QCOM_AUDIO_VARIANT)),)
     LOCAL_CFLAGS += -DQCOM_ENHANCED_AUDIO
 endif
 
-ifneq ($(TARGET_QCOM_MEDIA_VARIANT),)
+ifeq ($(TARGET_QCOM_MEDIA_VARIANT),caf)
 LOCAL_C_INCLUDES += \
-        $(TOP)/hardware/qcom/media-$(TARGET_QCOM_MEDIA_VARIANT)/mm-core/inc
+        $(TOP)/hardware/qcom/media-caf/mm-core/inc
 else
-LOCAL_C_INCLUDES += \
-        $(TOP)/hardware/qcom/media/mm-core/inc
+    ifeq ($(TARGET_QCOM_DISPLAY_VARIANT),legacy)
+        LOCAL_C_INCLUDES += \
+            $(TOP)/hardware/qcom/media-legacy/mm-core/inc
+    else
+        LOCAL_C_INCLUDES += \
+            $(TOP)/hardware/qcom/media/mm-core/inc
+endif
 endif
 
 LOCAL_SHARED_LIBRARIES := \
@@ -187,12 +188,17 @@ ifeq ($(TARGET_ENABLE_QC_AV_ENHANCEMENTS),true)
     LOCAL_CFLAGS += -DENABLE_QC_AV_ENHANCEMENTS
     LOCAL_SRC_FILES  += ExtendedWriter.cpp
     LOCAL_SRC_FILES  += QCMediaDefs.cpp
-    ifneq ($(TARGET_QCOM_MEDIA_VARIANT),)
+    ifeq ($(TARGET_QCOM_MEDIA_VARIANT),caf)
         LOCAL_C_INCLUDES += \
-            $(TOP)/hardware/qcom/media-$(TARGET_QCOM_MEDIA_VARIANT)/mm-core/inc
+            $(TOP)/hardware/qcom/media-caf/mm-core/inc
     else
-        LOCAL_C_INCLUDES += \
-            $(TOP)/hardware/qcom/media/mm-core/inc
+        ifeq ($(TARGET_QCOM_DISPLAY_VARIANT),legacy)
+            LOCAL_C_INCLUDES += \
+                $(TOP)/hardware/qcom/media-legacy/mm-core/inc
+        else
+            LOCAL_C_INCLUDES += \
+                $(TOP)/hardware/qcom/media/mm-core/inc
+        endif
     endif
 endif #TARGET_ENABLE_QC_AV_ENHANCEMENTS
 

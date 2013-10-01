@@ -328,6 +328,26 @@ uint32_t OMXCodec::getComponentQuirks(
                 index, "output-buffers-are-unreadable")) {
         quirks |= kOutputBuffersAreUnreadable;
     }
+    if (list->codecHasQuirk(
+                index, "needs-flush-before-disable")) {
+      quirks |= kNeedsFlushBeforeDisable;
+    }
+    if (list->codecHasQuirk(
+                index, "decoder-lies-about-nubmer-of-channels")) {
+      quirks |= kDecoderLiesAboutNumberOfChannels;
+    }
+    if (list->codecHasQuirk(
+                index, "requires-flush-complete-emulation")) {
+      quirks |= kRequiresFlushCompleteEmulation;
+    }
+    if (list->codecHasQuirk(
+                index, "supports-multiple-frames-per-input-buffer")) {
+      quirks |= kSupportsMultipleFramesPerInputBuffer;
+    }
+    if (list->codecHasQuirk(
+                index, "input-buffer-sizes-are-bogus")) {
+      quirks |= kInputBufferSizesAreBogus;
+    }
 #ifdef OMAP_ENHANCEMENT
     if (list->codecHasQuirk(
                 index, "avoid-memcopy-input-recording-frames")) {
@@ -450,6 +470,37 @@ sp<MediaSource> OMXCodec::Create(
         }
 
         ALOGV("Attempting to allocate OMX node '%s'", componentName);
+
+        // Engle, add for ME722
+#ifdef OMAP_COMPAT
+        if (!strcasecmp(componentName, "OMX.TI.Video.Decoder")) {
+            int32_t width, height;
+            bool success = meta->findInt32(kKeyWidth, &width);
+            success = success && meta->findInt32(kKeyHeight, &height);
+            CHECK(success);
+            // We need this for 720p video without AVC profile
+            // Not a good solution, but ..
+            if (width*height > 412800) {  //860*480
+               componentName = "OMX.TI.720P.Decoder";
+               ALOGE("Format exceed the decoder's capabilities. %d, Use OMX.TI.720P.Decoder", width*height);
+               continue;
+            }
+        }
+        if (!strcasecmp(componentName, "OMX.TI.Video.Encoder")) {
+            int32_t width, height;
+            bool success = meta->findInt32(kKeyWidth, &width);
+            success = success && meta->findInt32(kKeyHeight, &height);
+            CHECK(success);
+            // We need this for 720p video without AVC profile
+            // Not a good solution, but ..
+            if (width*height > 412800) {  //860*480
+               componentName = "OMX.TI.720P.Encoder";
+               ALOGE("Format exceed the decoder's capabilities. %d, use OMX.TI.720P.Encoder", width*height);
+               continue;
+            }
+        }
+#endif
+
 
         if (!createEncoder
                 && (quirks & kOutputBuffersAreUnreadable)
@@ -612,6 +663,20 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             CODEC_LOGI(
                     "AVC profile = %u (%s), level = %u",
                     profile, AVCProfileToString(profile), level);
+
+    // Engle, add for ME722
+#ifdef OMAP_COMPAT
+            if (!strcasecmp(mComponentName, "OMX.TI.Video.Decoder")
+                && (profile != kAVCProfileBaseline || level > 31)) {
+                // This stream exceeds the decoder's capabilities. The decoder
+                // does not handle this gracefully and would clobber the heap
+                // and wreak havoc instead...
+
+                ALOGE("Profile and/or level exceed the decoder's capabilities.");
+                return ERROR_UNSUPPORTED;
+            }
+#endif
+
         } else if (meta->findData(kKeyVorbisInfo, &type, &data, &size)) {
             addCodecSpecificData(data, size);
 
@@ -650,6 +715,24 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     if (mIsEncoder) {
         CHECK(meta->findInt32(kKeyBitRate, &bitRate));
     }
+
+    // Engle, add for ME722
+#ifdef OMAP_COMPAT
+    //Engle, required to prefer the 720P encoder on Defy red lens, and Defy+
+    #define MAX_ENCODER_RESOLUTION 848*480
+    if (!strcasecmp(mComponentName, "OMX.TI.Video.encoder")) {
+        int32_t width, height;
+        bool success = meta->findInt32(kKeyWidth, &width);
+        success = success && meta->findInt32(kKeyHeight, &height);
+        CHECK(success);
+        if (width*height > MAX_ENCODER_RESOLUTION) {
+            ALOGE("Format exceed the encoder's capabilities. %d", width*height);
+            // require OMX.TI.720P.Encoder
+            return ERROR_UNSUPPORTED;
+        }
+   }
+#endif
+
     if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_AMR_NB, mMIME)) {
         setAMRFormat(false /* isWAMR */, bitRate);
     } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_AMR_WB, mMIME)) {
@@ -752,6 +835,15 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     if (meta->findInt32(kKeyMaxInputSize, &maxInputSize)) {
         setMinBufferSize(kPortIndexInput, (OMX_U32)maxInputSize);
     }
+
+    // Engle, add for ME722
+#ifdef OMAP_COMPAT
+    if (!strcasecmp(mComponentName, "OMX.TI.AMR.encode")
+        || !strcasecmp(mComponentName, "OMX.TI.WBAMR.encode")
+        || !strcasecmp(mComponentName, "OMX.TI.AAC.encode")) {
+        setMinBufferSize(kPortIndexOutput, 8192); // XXX
+    }
+#endif
 
     initOutputFormat(meta);
 
@@ -956,6 +1048,13 @@ status_t OMXCodec::findTargetColorFormat(
         *colorFormat = (OMX_COLOR_FORMATTYPE) targetColorFormat;
     }
 
+    // Engle, add for ME722
+#ifdef OMAP_COMPAT
+    if (!strcasecmp("OMX.TI.Video.encoder", mComponentName) ||
+        !strcasecmp("OMX.TI.720P.Encoder", mComponentName)) {
+        *colorFormat = OMX_COLOR_FormatYCbYCr;
+    }
+#endif
     // Check whether the target color format is supported.
     return isColorFormatSupported(*colorFormat, kPortIndexInput);
 }
@@ -1641,6 +1740,10 @@ OMXCodec::OMXCodec(
       mPaused(false),
       mNativeWindow(
               (!strncmp(componentName, "OMX.google.", 11)
+// Engle, Add OMAP_COMPAT
+#ifdef OMAP_COMPAT
+              || !strncmp(componentName, "OMX.TI.", 7)
+#endif
               || !strcmp(componentName, "OMX.Nvidia.mpeg2v.decode"))
                         ? NULL : nativeWindow),
       mNumBFrames(0),
@@ -3764,6 +3867,18 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
 
     info->mStatus = OWNED_BY_COMPONENT;
 
+    // Engle, add for ME722
+#ifdef OMAP_COMPAT
+    // This component does not ever signal the EOS flag on output buffers,
+    // Thanks for nothing.
+    if (mSignalledEOS && (
+        !strcasecmp(mComponentName, "OMX.TI.Video.encoder") ||
+        !strcasecmp(mComponentName, "OMX.TI.720P.Encoder"))) {
+        mNoMoreOutputData = true;
+        mBufferFilled.signal();
+    }
+#endif
+
     return true;
 }
 
@@ -5384,7 +5499,8 @@ status_t QueryCodec(
     // Color format query
     OMX_VIDEO_PARAM_PORTFORMATTYPE portFormat;
     InitOMXParams(&portFormat);
-#ifdef OMAP_ENHANCEMENT
+// Engle, 修复解码MP4进入死循环.
+#if defined(OMAP_COMPAT) || defined(OMAP_ENHANCEMENT)
     portFormat.nPortIndex = !isEncoder ? 0 : 1;
 #else
     portFormat.nPortIndex = !isEncoder ? 1 : 0;

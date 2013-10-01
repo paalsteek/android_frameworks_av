@@ -80,7 +80,7 @@ LOCAL_SRC_FILES += \
     IDirectTrack.cpp \
     IDirectTrackClient.cpp
 
-ifneq ($(filter caf bfam,$(TARGET_QCOM_AUDIO_VARIANT)),)
+ifeq ($(TARGET_QCOM_AUDIO_VARIANT),caf)
 ifeq ($(BOARD_USES_ALSA_AUDIO),true)
     LOCAL_CFLAGS += -DQCOM_VOIP_ENABLED
 else
@@ -102,6 +102,17 @@ LOCAL_SHARED_LIBRARIES := \
         libgui libdl libaudioutils
 
 LOCAL_WHOLE_STATIC_LIBRARY := libmedia_helper
+
+ifeq ($(BOARD_USES_AUDIO_LEGACY),true)
+    LOCAL_SRC_FILES+= \
+        AudioParameter.cpp
+
+    LOCAL_CFLAGS += -DUSES_AUDIO_LEGACY
+endif
+
+ifeq ($(BOARD_USE_KINETO_COMPATIBILITY),true)
+    LOCAL_CFLAGS += -DUSE_KINETO_COMPATIBILITY
+endif
 
 LOCAL_MODULE:= libmedia
 

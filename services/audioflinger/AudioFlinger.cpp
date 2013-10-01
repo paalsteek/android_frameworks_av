@@ -125,13 +125,14 @@ static int load_audio_interface(const char *if_name, audio_hw_device_t **dev)
     if (rc) {
         goto out;
     }
-#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
-    if ((*dev)->common.version != AUDIO_DEVICE_API_VERSION_CURRENT) {
-        ALOGE("%s wrong audio hw device version %04x", __func__, (*dev)->common.version);
-        rc = BAD_VALUE;
-        goto out;
-    }
-#endif
+// Engle, 添加音频兼容性
+//#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
+//    if ((*dev)->common.version != AUDIO_DEVICE_API_VERSION_CURRENT) {
+//        ALOGE("%s wrong audio hw device version %04x", __func__, (*dev)->common.version);
+//        rc = BAD_VALUE;
+//        goto out;
+//    }
+//#endif
     return 0;
 
 out:
@@ -870,7 +871,9 @@ status_t AudioFlinger::setMasterMute(bool muted)
     Mutex::Autolock _l(mLock);
     mMasterMute = muted;
 
-#ifndef ICS_AUDIO_BLOB
+
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
     // Set master mute in the HALs which support it.
     for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
         AutoMutex lock(mHardwareLock);
@@ -1215,7 +1218,8 @@ size_t AudioFlinger::getInputBufferSize(uint32_t sampleRate, audio_format_t form
         format: format,
     };
     audio_hw_device_t *dev = mPrimaryHardwareDev->hwDevice();
-#ifndef ICS_AUDIO_BLOB
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
     size_t size = dev->get_input_buffer_size(dev, &config);
 #else
     size_t size = dev->get_input_buffer_size(dev, sampleRate, format, popcount(channelMask));
@@ -1644,7 +1648,8 @@ audio_module_handle_t AudioFlinger::loadHwModule_l(const char *name)
     {  // scope for auto-lock pattern
         AutoMutex lock(mHardwareLock);
 
-#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
         if (0 == mAudioHwDevs.size()) {
             mHardwareStatus = AUDIO_HW_GET_MASTER_VOLUME;
             if (NULL != dev->get_master_volume) {
@@ -1671,7 +1676,8 @@ audio_module_handle_t AudioFlinger::loadHwModule_l(const char *name)
                     AudioHwDevice::AHWD_CAN_SET_MASTER_VOLUME);
         }
 
-#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
         mHardwareStatus = AUDIO_HW_SET_MASTER_MUTE;
         if ((NULL != dev->set_master_mute) &&
             (OK == dev->set_master_mute(dev, mMasterMute))) {
@@ -1752,7 +1758,8 @@ audio_io_handle_t AudioFlinger::openOutput(audio_module_handle_t module,
 
     mHardwareStatus = AUDIO_HW_OUTPUT_OPEN;
 
-#ifndef ICS_AUDIO_BLOB
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
     status = hwDevHal->open_output_stream(hwDevHal,
                                           id,
                                           *pDevices,
@@ -2012,7 +2019,8 @@ audio_io_handle_t AudioFlinger::openInput(audio_module_handle_t module,
     audio_hw_device_t *inHwHal = inHwDev->hwDevice();
     audio_io_handle_t id = nextUniqueId();
 
-#ifndef ICS_AUDIO_BLOB
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
     status = inHwHal->open_input_stream(inHwHal, id, *pDevices, &config,
                                         &inStream);
 #else
@@ -2039,7 +2047,8 @@ audio_io_handle_t AudioFlinger::openInput(audio_module_handle_t module,
         (getInputChannelCount(config.channel_mask) <= FCC_2) && (getInputChannelCount(reqChannels) <= FCC_2)) {
         ALOGV("openInput() reopening with proposed sampling rate and channel mask");
         inStream = NULL;
-#ifndef ICS_AUDIO_BLOB
+// Engle, 添加音频兼容性
+#if !defined(ICS_AUDIO_BLOB) && !defined(USES_AUDIO_LEGACY)
         status = inHwHal->open_input_stream(inHwHal, id, *pDevices, &config, &inStream);
 #else
         status = inHwHal->open_input_stream(inHwHal, *pDevices, 
