@@ -779,6 +779,10 @@ M4OSA_ERR queryVideoDecoderCapabilities
     logSupportDecodersAndCapabilities(pDecoders);
     *decoders = pDecoders;
 cleanUp:
+    // Engle, port form SlimROM, start
+    // commit f185779039f81c250be1fb33da0d5aca57fb75fa
+    client.disconnect();
+    // Engle, end
     return err;
 }
 /********************

@@ -288,7 +288,10 @@ AudioFlinger::ThreadBase::ThreadBase(const sp<AudioFlinger>& audioFlinger, audio
         mStandby(false), mOutDevice(outDevice), mInDevice(inDevice),
         mAudioSource(AUDIO_SOURCE_DEFAULT), mId(id),
         // mName will be set by concrete (non-virtual) subclass
-        mDeathRecipient(new PMDeathRecipient(this))
+        mDeathRecipient(new PMDeathRecipient(this)),
+        // Engle, add initialize local variant
+        mPowerManager(0),
+        mWakeLockToken(0)
 {
 }
 
@@ -3801,7 +3804,13 @@ bool AudioFlinger::RecordThread::threadLoop()
                 continue;
             }
             for (size_t i = 0; i < effectChains.size(); i ++) {
-                effectChains[i]->process_l();
+#ifdef QCOM_HARDWARE
+                if (effectChains[i] != mAudioFlinger->mLPAEffectChain) {
+#endif
+                    effectChains[i]->process_l();
+#ifdef QCOM_HARDWARE
+                }
+#endif
             }
 
             buffer.frameCount = mFrameCount;
@@ -3868,6 +3877,7 @@ bool AudioFlinger::RecordThread::threadLoop()
                             } else {
                                 readInto = mRsmpInBuffer;
                                 mRsmpInIndex = 0;
+                                InputBytes = mInputBytes;
                             }
                             mBytesRead = mInput->stream->read(mInput->stream, readInto,
                                     mInputBytes);

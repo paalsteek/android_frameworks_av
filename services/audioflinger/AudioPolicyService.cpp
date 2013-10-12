@@ -492,15 +492,19 @@ bool AudioPolicyService::isStreamActive(audio_stream_type_t stream, uint32_t inP
 
 bool AudioPolicyService::isStreamActiveRemotely(audio_stream_type_t stream, uint32_t inPastMs) const
 {
+#ifndef ICS_AUDIO_BLOB
     if (mpAudioPolicy == NULL) {
         return 0;
     }
     Mutex::Autolock _l(mLock);
     return mpAudioPolicy->is_stream_active_remotely(mpAudioPolicy, stream, inPastMs);
+#endif
+    return 0;
 }
 
 bool AudioPolicyService::isSourceActive(audio_source_t source) const
 {
+#ifndef ICS_AUDIO_BLOB
     if (mpAudioPolicy == NULL) {
         return false;
     }
@@ -509,6 +513,9 @@ bool AudioPolicyService::isSourceActive(audio_source_t source) const
     }
     Mutex::Autolock _l(mLock);
     return mpAudioPolicy->is_source_active(mpAudioPolicy, source);
+#else
+    return false;
+#endif
 }
 
 status_t AudioPolicyService::queryDefaultPreProcessing(int audioSession,
@@ -934,6 +941,34 @@ status_t AudioPolicyService::AudioCommandThread::fmVolumeCommand(float volume, i
 }
 #endif
 
+#ifdef QCOM_FM_ENABLED
+status_t AudioPolicyService::AudioCommandThread::fmVolumeCommand(float volume, int delayMs)
+{
+    status_t status = NO_ERROR;
+
+    AudioCommand *command = new AudioCommand();
+    command->mCommand = SET_FM_VOLUME;
+    FmVolumeData *data = new FmVolumeData();
+    data->mVolume = volume;
+    command->mParam = data;
+    if (delayMs == 0) {
+        command->mWaitStatus = true;
+    } else {
+        command->mWaitStatus = false;
+    }
+    Mutex::Autolock _l(mLock);
+    insertCommand_l(command, delayMs);
+    ALOGV("AudioCommandThread() adding set fm volume volume %f", volume);
+    mWaitWorkCV.signal();
+    if (command->mWaitStatus) {
+        command->mCond.wait(mLock);
+        status =  command->mStatus;
+        mWaitWorkCV.signal();
+    }
+    return status;
+}
+#endif
+
 // insertCommand_l() must be called with mLock held
 void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *command, int delayMs)
 {
@@ -1082,6 +1117,13 @@ int AudioPolicyService::setStreamVolume(audio_stream_type_t stream,
     return (int)mAudioCommandThread->volumeCommand(stream, volume,
                                                    output, delayMs);
 }
+
+#ifdef QCOM_FM_ENABLED
+status_t AudioPolicyService::setFmVolume(float volume, int delayMs)
+{
+    return mAudioCommandThread->fmVolumeCommand(volume, delayMs);
+}
+#endif
 
 #ifdef QCOM_FM_ENABLED
 status_t AudioPolicyService::setFmVolume(float volume, int delayMs)
@@ -1609,6 +1651,15 @@ static int aps_set_voice_volume(void *service, float volume, int delay_ms)
 
     return audioPolicyService->setVoiceVolume(volume, delay_ms);
 }
+
+#ifdef QCOM_FM_ENABLED
+static int aps_set_fm_volume(void *service, float volume, int delay_ms)
+{
+    AudioPolicyService *audioPolicyService = (AudioPolicyService *)service;
+
+    return audioPolicyService->setFmVolume(volume, delay_ms);
+}
+#endif
 
 #ifdef QCOM_FM_ENABLED
 static int aps_set_fm_volume(void *service, float volume, int delay_ms)
